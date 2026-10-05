@@ -1,0 +1,24 @@
+# Smart Student Attendance Management System - AI/CV Service
+# All packages below publish official CPU-only wheels for Windows, Linux and
+# macOS via PyPI. No CUDA/GPU is required; everything runs on CPU.
+#
+# NOTE for headless Linux servers: mediapipe depends on "opencv-contrib-python"
+# which needs the system OpenGL library (libGL.so.1). Desktop Linux and
+# Windows already have this; on a minimal/headless Linux server install it
+# with `sudo apt-get install -y libgl1` (Debian/Ubuntu) - see
+# docs/TROUBLESHOOTING.md. Alternatively install with:
+#   pip install mediapipe --no-deps
+#   pip install opencv-contrib-python-headless absl-py attrs flatbuffers matplotlib numpy protobuf sounddevice jax jaxlib
+# to avoid the GUI-capable OpenCV build entirely.
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+pydantic==2.9.2
+pydantic-settings==2.5.2
+python-multipart==0.0.9
+numpy==1.26.4
+mediapipe==0.10.14
+python-dotenv==1.0.1
+
+# --- Dev/test-only dependencies (not needed in production) ---
+pytest==8.3.3
+httpx==0.27.2

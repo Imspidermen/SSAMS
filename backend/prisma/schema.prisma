@@ -1,0 +1,522 @@
+// ============================================================================
+// Smart Student Attendance Management System - Prisma Schema
+// PostgreSQL database schema with full referential integrity.
+// ============================================================================
+
+// Standard Prisma Client generator. Prisma officially publishes query-engine
+// binaries for Windows, Linux and macOS - `npm install` + `npx prisma
+// generate` downloads the correct one automatically for whichever OS you
+// develop on. No manual platform configuration is required.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ----------------------------------------------------------------------------
+// ENUMS
+// ----------------------------------------------------------------------------
+
+enum Role {
+  ADMIN
+  TEACHER
+  STUDENT
+}
+
+enum StudentStatus {
+  ACTIVE
+  INACTIVE
+  GRADUATED
+  SUSPENDED
+}
+
+enum FaceProfileStatus {
+  NOT_ENROLLED
+  PENDING
+  ENROLLED
+  RESET
+}
+
+enum SessionStatus {
+  SCHEDULED
+  ACTIVE
+  ENDED
+  CANCELLED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  EXCUSED
+}
+
+enum NotificationType {
+  ATTENDANCE_SUCCESS
+  ATTENDANCE_FAILED
+  LOW_ATTENDANCE
+  ATTENDANCE_REMINDER
+  SESSION_STARTED
+  SESSION_ENDING
+  SYSTEM_NOTIFICATION
+}
+
+enum PolicyScope {
+  GLOBAL
+  DEPARTMENT
+}
+
+enum VerificationSessionStatus {
+  IN_PROGRESS
+  COMPLETED
+  EXPIRED
+  FAILED
+}
+
+// ----------------------------------------------------------------------------
+// CORE IDENTITY
+// ----------------------------------------------------------------------------
+
+model User {
+  id                 String    @id @default(uuid())
+  email              String    @unique
+  passwordHash       String
+  role               Role
+  isActive           Boolean   @default(true)
+  failedLoginCount   Int       @default(0)
+  lockedUntil        DateTime?
+  lastLoginAt        DateTime?
+  mustChangePassword Boolean   @default(false)
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  student Student?
+  teacher Teacher?
+  admin   Admin?
+
+  refreshTokens        RefreshToken[]
+  passwordResetTokens  PasswordResetToken[]
+  notifications        Notification[]
+  auditLogs            AuditLog[]
+
+  @@index([role])
+  @@map("users")
+}
+
+model RefreshToken {
+  id              String    @id @default(uuid())
+  userId          String
+  tokenHash       String    @unique
+  expiresAt       DateTime
+  revokedAt       DateTime?
+  createdByIp     String?
+  replacedByToken String?
+  createdAt       DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+// ----------------------------------------------------------------------------
+// ACADEMIC STRUCTURE
+// ----------------------------------------------------------------------------
+
+model Department {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  code      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  courses  Course[]
+  subjects Subject[]
+  students Student[]
+  teachers Teacher[]
+  policies AttendanceRule[]
+
+  @@map("departments")
+}
+
+model Course {
+  id                 String   @id @default(uuid())
+  name               String
+  code               String   @unique
+  departmentId       String
+  durationSemesters  Int      @default(6)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  department Department @relation(fields: [departmentId], references: [id])
+  subjects   Subject[]
+
+  @@index([departmentId])
+  @@map("courses")
+}
+
+model Subject {
+  id           String   @id @default(uuid())
+  name         String
+  code         String   @unique
+  departmentId String
+  courseId     String?
+  semester     Int
+  credits      Int      @default(4)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  department Department @relation(fields: [departmentId], references: [id])
+  course     Course?    @relation(fields: [courseId], references: [id])
+
+  teacherAssignments TeacherSubject[]
+  enrollments        StudentSubjectEnrollment[]
+  sessions           AttendanceSession[]
+
+  @@index([departmentId])
+  @@index([semester])
+  @@map("subjects")
+}
+
+model Classroom {
+  id           String   @id @default(uuid())
+  name         String
+  building     String?
+  floor        String?
+  latitude     Float
+  longitude    Float
+  radiusMeters Int      @default(100)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  sessions AttendanceSession[]
+
+  @@map("classrooms")
+}
+
+// ----------------------------------------------------------------------------
+// PEOPLE
+// ----------------------------------------------------------------------------
+
+model Student {
+  id             String        @id @default(uuid())
+  userId         String        @unique
+  studentCode    String        @unique // Student ID
+  rollNumber     String
+  fullName       String
+  phone          String?
+  departmentId   String
+  semester       Int
+  section        String
+  academicYear   String
+  status         StudentStatus @default(ACTIVE)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department Department @relation(fields: [departmentId], references: [id])
+
+  faceProfile       FaceProfile?
+  enrollments       StudentSubjectEnrollment[]
+  attendanceRecords AttendanceRecord[]
+  verificationSessions AttendanceVerificationSession[]
+
+  @@index([departmentId, semester, section])
+  @@index([rollNumber])
+  @@map("students")
+}
+
+model Teacher {
+  id           String   @id @default(uuid())
+  userId       String   @unique
+  employeeCode String   @unique
+  fullName     String
+  phone        String?
+  departmentId String
+  designation  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department Department @relation(fields: [departmentId], references: [id])
+
+  subjectAssignments TeacherSubject[]
+  sessions           AttendanceSession[]
+  corrections        AttendanceCorrection[]
+
+  @@index([departmentId])
+  @@map("teachers")
+}
+
+model Admin {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  fullName  String
+  phone     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("admins")
+}
+
+model TeacherSubject {
+  id         String   @id @default(uuid())
+  teacherId  String
+  subjectId  String
+  section    String?
+  assignedAt DateTime @default(now())
+
+  teacher Teacher @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@unique([teacherId, subjectId, section])
+  @@map("teacher_subjects")
+}
+
+model StudentSubjectEnrollment {
+  id         String   @id @default(uuid())
+  studentId  String
+  subjectId  String
+  active     Boolean  @default(true)
+  enrolledAt DateTime @default(now())
+
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  subject Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, subjectId])
+  @@map("student_subject_enrollments")
+}
+
+// ----------------------------------------------------------------------------
+// BIOMETRICS (FACE)
+// ----------------------------------------------------------------------------
+
+model FaceProfile {
+  id          String            @id @default(uuid())
+  studentId   String            @unique
+  status      FaceProfileStatus @default(NOT_ENROLLED)
+  sampleCount Int               @default(0)
+  enrolledAt  DateTime?
+  resetAt     DateTime?
+  resetBy     String? // admin user id who reset it
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  student    Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  embeddings FaceEmbedding[]
+
+  @@map("face_profiles")
+}
+
+// Embeddings are numeric vectors only - never raw images - produced by the
+// AI service (OpenCV SFace, 128-d). Never exposed via public API responses.
+model FaceEmbedding {
+  id            String   @id @default(uuid())
+  faceProfileId String
+  vector        Float[]
+  quality       Float    @default(0)
+  createdAt     DateTime @default(now())
+
+  faceProfile FaceProfile @relation(fields: [faceProfileId], references: [id], onDelete: Cascade)
+
+  @@index([faceProfileId])
+  @@map("face_embeddings")
+}
+
+// ----------------------------------------------------------------------------
+// ATTENDANCE
+// ----------------------------------------------------------------------------
+
+model AttendanceSession {
+  id                 String        @id @default(uuid())
+  subjectId          String
+  teacherId          String
+  classroomId        String
+  semester           Int
+  section            String
+  startTime          DateTime
+  endTime            DateTime
+  status             SessionStatus @default(SCHEDULED)
+  geofenceRadiusM    Int? // override of classroom radius
+  livenessRequired   Boolean       @default(true)
+  blinkRequired      Boolean       @default(true)
+  maxAttempts        Int           @default(3)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  subject   Subject   @relation(fields: [subjectId], references: [id])
+  teacher   Teacher   @relation(fields: [teacherId], references: [id])
+  classroom Classroom @relation(fields: [classroomId], references: [id])
+
+  attendanceRecords     AttendanceRecord[]
+  verificationSessions  AttendanceVerificationSession[]
+
+  @@index([teacherId])
+  @@index([subjectId])
+  @@index([status])
+  @@index([startTime, endTime])
+  @@map("attendance_sessions")
+}
+
+model AttendanceRecord {
+  id        String            @id @default(uuid())
+  sessionId String
+  studentId String
+  status    AttendanceStatus  @default(PRESENT)
+  markedAt  DateTime          @default(now())
+
+  faceVerified        Boolean  @default(false)
+  faceScore           Float?
+  livenessVerified    Boolean  @default(false)
+  blinkVerified        Boolean  @default(false)
+  locationVerified     Boolean  @default(false)
+  locationAccuracyM    Float?
+  distanceFromCenterM  Float?
+  verificationMetadata Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  session AttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  student Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  correction AttendanceCorrection?
+
+  @@unique([sessionId, studentId])
+  @@index([studentId])
+  @@index([sessionId])
+  @@map("attendance_records")
+}
+
+model AttendanceCorrection {
+  id               String           @id @default(uuid())
+  attendanceId     String           @unique
+  originalStatus   AttendanceStatus
+  newStatus        AttendanceStatus
+  reason           String
+  correctedByTeacherId String?
+  createdAt        DateTime         @default(now())
+
+  attendance AttendanceRecord @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+  teacher    Teacher?         @relation(fields: [correctedByTeacherId], references: [id])
+
+  @@map("attendance_corrections")
+}
+
+// Ephemeral, short-lived, server-tracked verification progress for a single
+// attendance attempt. This prevents the frontend from being able to call
+// POST /attendance/mark directly with just studentId+sessionId.
+model AttendanceVerificationSession {
+  id                 String                     @id @default(uuid())
+  sessionId          String
+  studentId          String
+  status             VerificationSessionStatus  @default(IN_PROGRESS)
+  challengeSequence  Json // e.g. ["TURN_LEFT","TURN_RIGHT","BLINK"]
+
+  locationVerified   Boolean   @default(false)
+  locationVerifiedAt DateTime?
+  latitude           Float?
+  longitude          Float?
+  accuracyM          Float?
+  distanceM          Float?
+
+  faceVerified       Boolean   @default(false)
+  faceVerifiedAt     DateTime?
+  faceScore          Float?
+
+  livenessVerified   Boolean   @default(false)
+  livenessVerifiedAt DateTime?
+
+  blinkVerified      Boolean   @default(false)
+  blinkVerifiedAt    DateTime?
+
+  attempts           Int       @default(0)
+  expiresAt          DateTime
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  session AttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  student Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, studentId])
+  @@index([expiresAt])
+  @@map("attendance_verification_sessions")
+}
+
+// ----------------------------------------------------------------------------
+// POLICY / NOTIFICATIONS / AUDIT
+// ----------------------------------------------------------------------------
+
+model AttendanceRule {
+  id                        String      @id @default(uuid())
+  scope                     PolicyScope @default(GLOBAL)
+  departmentId              String?
+  minAttendancePercentage   Float       @default(75)
+  defaultGeofenceRadiusM    Int         @default(100)
+  defaultSessionDurationMin Int         @default(15)
+  maxVerificationAttempts   Int         @default(3)
+  livenessMandatory         Boolean     @default(true)
+  blinkMandatory            Boolean     @default(true)
+  faceMatchThreshold        Float       @default(0.62)
+  updatedAt                 DateTime    @updatedAt
+  createdAt                 DateTime    @default(now())
+
+  department Department? @relation(fields: [departmentId], references: [id])
+
+  @@unique([scope, departmentId])
+  @@map("attendance_rules")
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String
+  isRead    Boolean          @default(false)
+  metadata  Json?
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  userId     String?
+  action     String
+  entityType String?
+  entityId   String?
+  metadata   Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
