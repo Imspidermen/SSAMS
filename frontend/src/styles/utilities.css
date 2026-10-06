@@ -1,0 +1,147 @@
+/* ==========================================================================
+   utilities.css
+   Layout helpers and small element modifiers shared by the pages. Everything
+   here is built from the design tokens in tokens.css so dark mode, density and
+   brand changes stay a single-variable edit.
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   Page-level grids
+   -------------------------------------------------------------------------- */
+
+/** KPI tiles above the main content of a dashboard. */
+.charts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  gap: var(--space-4);
+  align-items: start;
+}
+
+/** Two-column dashboard split: primary panel + supporting column. */
+.dashboard-split {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: var(--space-4);
+  align-items: start;
+  margin-top: var(--space-5);
+}
+
+@media (max-width: 62rem) {
+  .dashboard-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 40rem) {
+  .charts-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* --------------------------------------------------------------------------
+   Table cell helpers
+   -------------------------------------------------------------------------- */
+
+/** Progress bar plus its numeric value inside a table cell. */
+.cell-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 9rem;
+}
+
+.cell-progress > .progress {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.cell-progress__value {
+  flex: none;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --------------------------------------------------------------------------
+   Activity list: status dot + tone modifiers
+   -------------------------------------------------------------------------- */
+.activity-list__dot {
+  flex: none;
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: var(--radius-full);
+  background-color: var(--text-muted);
+}
+
+.activity-list__dot--success {
+  background-color: var(--success);
+}
+.activity-list__dot--danger {
+  background-color: var(--danger);
+}
+.activity-list__dot--warning {
+  background-color: var(--warning);
+}
+.activity-list__dot--info {
+  background-color: var(--info, var(--primary));
+}
+.activity-list__dot--primary {
+  background-color: var(--primary);
+}
+.activity-list__dot--neutral {
+  background-color: var(--text-muted);
+}
+
+.activity-list__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* --------------------------------------------------------------------------
+   Checklist: icon variant (guidance lists without numbering)
+   -------------------------------------------------------------------------- */
+.checklist__icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: var(--radius-full);
+  background-color: var(--success-soft);
+  color: var(--success);
+  margin-top: 1px;
+}
+
+.checklist__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.checklist__body strong {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-semibold);
+  color: var(--text-primary);
+}
+
+/* --------------------------------------------------------------------------
+   Attendance summary headline value (student profile card)
+   -------------------------------------------------------------------------- */
+.attendance-summary {
+  display: grid;
+  gap: var(--space-1);
+  justify-items: center;
+  text-align: center;
+}
+
+.attendance-summary__value {
+  margin: 0;
+  font-size: var(--text-3xl, 2rem);
+  font-weight: var(--weight-bold);
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}

@@ -1,0 +1,11 @@
+/* ==========================================================================
+   SSAMS design system entry point.
+   Import order matters: tokens define the variables, base resets and applies
+   typography, layout builds the app shell, components style reusable UI and
+   utilities add the page-level helpers used across screens.
+   ========================================================================== */
+@import './tokens.css';
+@import './base.css';
+@import './layout.css';
+@import './components.css';
+@import './utilities.css';
