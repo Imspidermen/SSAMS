@@ -11,3 +11,8 @@ export const subjects = asyncHandler(async (req: Request, res: Response) => {
   const data = await teacherService.getAssignedSubjects(req.user!.id);
   res.json({ success: true, data });
 });
+
+export const classrooms = asyncHandler(async (req: Request, res: Response) => {
+  const data = await teacherService.getAvailableClassrooms(req.user!.id);
+  res.json({ success: true, data });
+});

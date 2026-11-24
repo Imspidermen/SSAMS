@@ -1,0 +1,245 @@
+/* ==========================================================================
+   SSAMS Design Tokens
+   --------------------------------------------------------------------------
+   Single source of truth for colour, typography, spacing, elevation and
+   motion. Components must consume these variables - never hard-coded values -
+   so the whole product can be re-themed (including dark mode) from one place.
+
+   Colour language (used consistently everywhere):
+     blue   -> brand / navigation / primary actions
+     green  -> present / success / verified
+     red    -> absent / error / destructive
+     amber  -> warning / low attendance / late
+     slate  -> neutral information, excused, pending
+   Colour is never the only carrier of meaning: every status is paired with a
+   text label and/or an icon (WCAG 1.4.1 - Use of Colour).
+   ========================================================================== */
+
+:root {
+  /* ---- Brand ---------------------------------------------------------- */
+  --primary: #1d4ed8;
+  --primary-hover: #1a45be;
+  --primary-active: #163a9e;
+  --primary-soft: #e8eefc;
+  --primary-soft-hover: #dbe5fa;
+  --primary-contrast: #ffffff;
+  --primary-border: #b9cbf4;
+
+  /* ---- Neutrals / surfaces -------------------------------------------- */
+  --background: #f5f6f9;
+  --surface: #ffffff;
+  --surface-muted: #f1f3f7;
+  --surface-raised: #ffffff;
+  --surface-sunken: #eef0f5;
+  --border: #e2e6ed;
+  --border-strong: #c9d1dd;
+  --border-subtle: #edf0f5;
+
+  /* ---- Text ------------------------------------------------------------ */
+  --text-primary: #0f172a;
+  --text-secondary: #52607a;
+  --text-muted: #7b879c;
+  --text-inverse: #ffffff;
+  --text-link: #1d4ed8;
+  --text-link-hover: #163a9e;
+
+  /* ---- Semantic status -------------------------------------------------- */
+  --success: #15803d;
+  --success-strong: #116530;
+  --success-soft: #e6f6ec;
+  --success-border: #b3e0c3;
+
+  --warning: #b45309;
+  --warning-strong: #92400e;
+  --warning-soft: #fdf2e0;
+  --warning-border: #f2d5a3;
+
+  --danger: #b91c1c;
+  --danger-strong: #991b1b;
+  --danger-soft: #fdeaea;
+  --danger-border: #f3bcbc;
+
+  --info: #0e7490;
+  --info-soft: #e3f5f9;
+  --info-border: #a9dfe9;
+
+  --neutral-soft: #eef0f5;
+  --neutral-border: #d6dbe4;
+
+  /* ---- Focus / selection ------------------------------------------------ */
+  --focus-ring: rgba(29, 78, 216, 0.42);
+  --focus-ring-offset: #ffffff;
+  --selection: rgba(29, 78, 216, 0.14);
+
+  /* ---- Elevation -------------------------------------------------------- */
+  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.07), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-md: 0 4px 12px rgba(15, 23, 42, 0.08), 0 2px 4px rgba(15, 23, 42, 0.04);
+  --shadow-lg: 0 12px 32px rgba(15, 23, 42, 0.14), 0 4px 10px rgba(15, 23, 42, 0.06);
+  --shadow-focus: 0 0 0 3px var(--focus-ring);
+
+  /* ---- Typography ------------------------------------------------------- */
+  --font-sans:
+    'Inter', 'Inter var', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, 'Noto Sans', sans-serif;
+  --font-mono:
+    ui-monospace, 'Cascadia Mono', 'Segoe UI Mono', SFMono-Regular, Menlo, Consolas,
+    'Liberation Mono', monospace;
+
+  --text-2xs: 0.6875rem; /* 11px */
+  --text-xs: 0.75rem; /* 12px */
+  --text-sm: 0.8125rem; /* 13px */
+  --text-base: 0.875rem; /* 14px */
+  --text-md: 1rem; /* 16px */
+  --text-lg: 1.125rem; /* 18px */
+  --text-xl: 1.25rem; /* 20px */
+  --text-2xl: 1.5rem; /* 24px */
+  --text-3xl: 1.875rem; /* 30px */
+  --text-4xl: 2.25rem; /* 36px */
+
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.65;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* ---- Spacing (4px base grid) ------------------------------------------ */
+  --space-0: 0;
+  --space-px: 1px;
+  --space-1: 0.25rem; /* 4px  */
+  --space-2: 0.5rem; /* 8px  */
+  --space-3: 0.75rem; /* 12px */
+  --space-4: 1rem; /* 16px */
+  --space-5: 1.25rem; /* 20px */
+  --space-6: 1.5rem; /* 24px */
+  --space-7: 2rem; /* 32px */
+  --space-8: 2.5rem; /* 40px */
+  --space-9: 3rem; /* 48px */
+  --space-10: 4rem; /* 64px */
+
+  /* ---- Radius ------------------------------------------------------------ */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-full: 999px;
+
+  /* ---- Layout metrics ---------------------------------------------------- */
+  --sidebar-width: 15.5rem; /* 248px */
+  --sidebar-width-collapsed: 4.25rem;
+  --topbar-height: 3.75rem; /* 60px */
+  --content-max-width: 88rem; /* 1408px */
+  --mobile-nav-height: 3.5rem;
+
+  /* ---- Motion ------------------------------------------------------------ */
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
+  --duration-slow: 260ms;
+  --easing-standard: cubic-bezier(0.2, 0, 0, 1);
+  --easing-decelerate: cubic-bezier(0, 0, 0.2, 1);
+
+  /* ---- Stacking ------------------------------------------------------------ */
+  --z-sidebar: 40;
+  --z-topbar: 30;
+  --z-drawer-backdrop: 60;
+  --z-drawer: 70;
+  --z-modal-backdrop: 80;
+  --z-modal: 90;
+  --z-toast: 100;
+  --z-dropdown: 50;
+
+  /* ---- Data visualisation -------------------------------------------------- */
+  --chart-present: #16a34a;
+  --chart-absent: #dc2626;
+  --chart-late: #f59e0b;
+  --chart-excused: #64748b;
+  --chart-grid: var(--border);
+  --chart-axis: var(--text-muted);
+  --chart-series-1: #1d4ed8;
+  --chart-series-2: #0e7490;
+  --chart-series-3: #7c3aed;
+}
+
+/* --------------------------------------------------------------------------
+   Dark theme - mirrors the light tokens. Applied via `data-theme` on <html>
+   (set by the inline bootstrap script in index.html and by ThemeProvider).
+   -------------------------------------------------------------------------- */
+:root[data-theme='dark'] {
+  --primary: #6d9bff;
+  --primary-hover: #86adff;
+  --primary-active: #5b8bf5;
+  --primary-soft: #1b2a4a;
+  --primary-soft-hover: #22345a;
+  --primary-contrast: #0b1220;
+  --primary-border: #2f4470;
+
+  --background: #0d1117;
+  --surface: #151a22;
+  --surface-muted: #1b212b;
+  --surface-raised: #1a2029;
+  --surface-sunken: #11151c;
+  --border: #262d39;
+  --border-strong: #38414f;
+  --border-subtle: #1f252f;
+
+  --text-primary: #e7ebf2;
+  --text-secondary: #a7b1c2;
+  --text-muted: #7f8a9c;
+  --text-inverse: #0b1220;
+  --text-link: #86adff;
+  --text-link-hover: #a5c2ff;
+
+  --success: #4ade80;
+  --success-strong: #86efac;
+  --success-soft: #12291c;
+  --success-border: #1f4d31;
+
+  --warning: #fbbf24;
+  --warning-strong: #fcd34d;
+  --warning-soft: #2b2113;
+  --warning-border: #5c451c;
+
+  --danger: #f87171;
+  --danger-strong: #fca5a5;
+  --danger-soft: #2d1717;
+  --danger-border: #5f2626;
+
+  --info: #22d3ee;
+  --info-soft: #10272e;
+  --info-border: #1b4b57;
+
+  --neutral-soft: #1e242e;
+  --neutral-border: #333c49;
+
+  --focus-ring: rgba(109, 155, 255, 0.45);
+  --focus-ring-offset: #0d1117;
+  --selection: rgba(109, 155, 255, 0.22);
+
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.45);
+  --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 14px 36px rgba(0, 0, 0, 0.6);
+
+  --chart-present: #22c55e;
+  --chart-absent: #ef4444;
+  --chart-late: #f59e0b;
+  --chart-excused: #94a3b8;
+  --chart-grid: #262d39;
+  --chart-axis: #7f8a9c;
+  --chart-series-1: #6d9bff;
+  --chart-series-2: #22d3ee;
+  --chart-series-3: #a78bfa;
+}
+
+/* --------------------------------------------------------------------------
+   Breakpoints (documented here; used in @media queries across the stylesheets)
+     sm  >= 640px   large phones landscape / small tablets
+     md  >= 768px   tablets portrait
+     lg  >= 1024px  small laptops / tablets landscape
+     xl  >= 1280px  laptops & desktops
+     2xl >= 1536px  large desktops
+   -------------------------------------------------------------------------- */

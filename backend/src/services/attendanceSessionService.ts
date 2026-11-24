@@ -20,9 +20,16 @@ export async function startSession(input: StartSessionInput) {
 
   const assignment = await prisma.teacherSubject.findFirst({
     where: { teacherId: teacher.id, subjectId: input.subjectId },
+    include: { subject: { select: { semester: true } } },
   });
   if (!assignment) {
     throw new ForbiddenError('You are not assigned to teach this subject', 'NOT_ASSIGNED');
+  }
+  if (assignment.section && assignment.section !== input.section) {
+    throw new ForbiddenError('You are not assigned to teach this section', 'NOT_ASSIGNED');
+  }
+  if (assignment.subject.semester !== input.semester) {
+    throw new ForbiddenError('This subject is not assigned to the selected semester', 'NOT_ASSIGNED');
   }
 
   const classroom = await prisma.classroom.findUnique({ where: { id: input.classroomId } });

@@ -18,6 +18,12 @@ export async function getAssignedSubjects(userId: string) {
   });
 }
 
+/** Rooms a signed-in teacher may use when opening an attendance session. */
+export async function getAvailableClassrooms(userId: string) {
+  await getTeacherByUserId(userId);
+  return prisma.classroom.findMany({ orderBy: { name: 'asc' } });
+}
+
 export async function getTeacherDashboard(userId: string) {
   const teacher = await getTeacherByUserId(userId);
 

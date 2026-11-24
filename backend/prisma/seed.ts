@@ -69,11 +69,25 @@ async function main() {
     },
   });
 
-  await prisma.attendanceRule.upsert({
-    where: { scope_departmentId: { scope: 'GLOBAL', departmentId: null } } as never,
-    update: {},
-    create: {
+const globalAttendanceRule = await prisma.attendanceRule.findFirst({
+  where: {
+    scope: 'GLOBAL',
+    departmentId: null,
+  },
+});
+
+if (globalAttendanceRule) {
+  await prisma.attendanceRule.update({
+    where: {
+      id: globalAttendanceRule.id,
+    },
+    data: {},
+  });
+} else {
+  await prisma.attendanceRule.create({
+    data: {
       scope: 'GLOBAL',
+      departmentId: null,
       minAttendancePercentage: 75,
       defaultGeofenceRadiusM: 100,
       defaultSessionDurationMin: 15,
@@ -83,6 +97,7 @@ async function main() {
       faceMatchThreshold: 0.62,
     },
   });
+}
 
   const adminPasswordHash = await hashPassword(DEV_PASSWORD);
   const adminUser = await prisma.user.upsert({

@@ -2,7 +2,8 @@ import { z } from 'zod';
 
 export const startSessionSchema = z.object({
   subjectId: z.string().uuid(),
-  classroomId: z.string().uuid(),
+  // Prisma IDs are strings; seeded/legacy classrooms may use readable keys.
+  classroomId: z.string().trim().min(1),
   semester: z.number().int().min(1).max(12),
   section: z.string().min(1),
   durationMinutes: z.number().int().min(1).max(240).optional(),

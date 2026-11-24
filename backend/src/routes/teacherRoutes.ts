@@ -6,5 +6,6 @@ const router = Router();
 router.use(authenticate, authorize('TEACHER'));
 router.get('/dashboard', teacherController.dashboard);
 router.get('/subjects', teacherController.subjects);
+router.get('/classrooms', teacherController.classrooms);
 
 export default router;

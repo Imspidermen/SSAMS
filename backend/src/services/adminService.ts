@@ -327,8 +327,8 @@ export async function enrollStudentInSubject(data: { studentId: string; subjectI
 
 export async function getPolicy(departmentId?: string) {
   const scope = departmentId ? 'DEPARTMENT' : 'GLOBAL';
-  const policy = await prisma.attendanceRule.findUnique({
-    where: { scope_departmentId: { scope, departmentId: departmentId ?? null } } as never,
+  const policy = await prisma.attendanceRule.findFirst({
+    where: { scope, departmentId: departmentId ?? null },
   });
   if (policy) return policy;
   if (departmentId) return getPolicy(undefined);
@@ -341,10 +341,17 @@ export async function upsertPolicy(input: {
   [key: string]: unknown;
 }) {
   const { scope, departmentId, ...rest } = input;
-  return prisma.attendanceRule.upsert({
-    where: { scope_departmentId: { scope, departmentId: departmentId ?? null } } as never,
-    create: { scope, departmentId, ...rest } as never,
-    update: rest as never,
+  // PostgreSQL unique constraints treat NULL values as distinct, and Prisma's
+  // nullable compound selector cannot be used safely for the global rule.
+  // Read by the nullable columns, then update/create by the concrete row ID.
+  const existing = await prisma.attendanceRule.findFirst({
+    where: { scope, departmentId: departmentId ?? null },
+  });
+  if (existing) {
+    return prisma.attendanceRule.update({ where: { id: existing.id }, data: rest });
+  }
+  return prisma.attendanceRule.create({
+    data: { scope, departmentId: departmentId ?? null, ...rest },
   });
 }
 
