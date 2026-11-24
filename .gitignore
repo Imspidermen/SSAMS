@@ -1,6 +1,9 @@
 .env
 .env.*
 !.env.example
+# Non-secret dev defaults (API base URL + proxy target) so `npm run dev` works
+# out of the box on Windows and Linux. Contains no credentials.
+!frontend/.env.development
 node_modules/
 .venv/
 venv/
