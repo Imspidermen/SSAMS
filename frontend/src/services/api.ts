@@ -10,8 +10,9 @@
  *      cannot be read by an XSS payload after a reload. Every request also
  *      carries cookies (`withCredentials`), which means a page reload stays
  *      authenticated purely through the httpOnly cookie.
- *   3. A 401 triggers exactly one silent `POST /auth/refresh` (single-flight,
- *      all concurrent requests wait on the same promise), then retries. If the
+ *   3. An authentication 401 triggers one silent `POST /auth/refresh` (single-flight,
+ *      all concurrent requests wait on the same promise), then retries. Biometric
+ *      rejection 401s are returned to the verification flow without replay. If the
  *      refresh fails the session is torn down and listeners are notified so the
  *      router can bounce the user to /login.
  *   4. When the request is authenticated by cookie (no Authorization header)
@@ -63,9 +64,9 @@ function readCookie(name: string): string | null {
   return match ? decodeURIComponent(match.slice(name.length + 1)) : null;
 }
 
-/** CSRF token from memory, falling back to the JS-readable cookie. */
+/** Echo the current cookie; another tab may have rotated it since login. */
 function resolveCsrfToken(): string | null {
-  return tokenState.csrfToken ?? readCookie('csrf_token');
+  return readCookie('csrf_token') ?? tokenState.csrfToken;
 }
 
 /* ------------------------------------------------------------------------- */
@@ -143,10 +144,15 @@ export function refreshSession(): Promise<boolean> {
     try {
       // Bare axios call: bypasses the interceptors so a failing refresh cannot
       // recurse into another refresh attempt.
+      const csrf = resolveCsrfToken();
       const response = await axios.post<ApiResponse<AuthPayload>>(
         `${appConfig.apiUrl}/auth/refresh`,
         {},
-        { withCredentials: true, timeout: API_TIMEOUT_MS, headers: { Accept: 'application/json' } },
+        {
+          withCredentials: true,
+          timeout: API_TIMEOUT_MS,
+          headers: { Accept: 'application/json', ...(csrf ? { 'X-CSRF-Token': csrf } : {}) },
+        },
       );
       const payload = response.data?.data;
       if (!payload?.accessToken) return false;
@@ -233,13 +239,21 @@ apiClient.interceptors.response.use(
     const axiosError = error instanceof AxiosError ? error : null;
     const config = axiosError?.config as RetryableConfig | undefined;
 
-    if (axiosError?.response?.status === 401 && config && !config._retriedAfterRefresh) {
+    const code = (axiosError?.response?.data as ApiErrorResponse | undefined)?.error?.code;
+    // The attendance API also uses 401 for failed face/liveness/blink checks.
+    // Only missing/invalid access credentials can be repaired by a refresh.
+    const isAuthFailure = code === 'TOKEN_INVALID' || code === 'UNAUTHORIZED';
+    if (axiosError?.response?.status === 401 && isAuthFailure && config && !config._retriedAfterRefresh) {
       const url = typeof config.url === 'string' ? config.url : '';
       const skipRefresh = config._skipAuthRefresh === true || isAuthRefreshPath(url);
 
       if (!skipRefresh) {
         config._retriedAfterRefresh = true;
-        const refreshed = await refreshSession();
+        // A slow response may arrive after another request already refreshed.
+        // Retry with that token instead of rotating the refresh cookie again.
+        const currentAuth = tokenState.accessToken ? `Bearer ${tokenState.accessToken}` : null;
+        const tokenChanged = currentAuth !== null && config.headers.get('Authorization') !== currentAuth;
+        const refreshed = tokenChanged || await refreshSession();
         if (refreshed) {
           return apiClient.request(config);
         }
