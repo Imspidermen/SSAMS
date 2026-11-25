@@ -303,7 +303,7 @@ async function setupDatabase() {
       log('db', 'Port 5432 is already in use; using local PostgreSQL port 5433.', 'yellow');
     }
     process.env.DATABASE_URL = `postgresql://ssams:ssams@localhost:${process.env.SSAMS_LOCAL_DB_PORT || 5432}/ssams?schema=public`;
-    log('db', `No DATABASE_URL — starting local PostgreSQL (${process.env.DATABASE_URL})`, 'yellow');
+    log('db', `DATABASE_URL is empty; starting local PostgreSQL on port ${process.env.SSAMS_LOCAL_DB_PORT || 5432}.`, 'yellow');
     try {
       if (process.platform === 'win32' && localPostgresBin) {
         // `run` uses cmd.exe on Windows; invoking the PATH-resolved `node`
@@ -327,13 +327,13 @@ async function setupDatabase() {
       applied = true;
       break;
     } catch (e) {
-      log('db', `migration attempt ${i + 1} failed, retrying...`, 'yellow');
+      log('db', `Migration attempt ${i + 1}/6 failed; retrying in 3 seconds.`, 'yellow');
       // eslint-disable-next-line no-await-in-loop
       await new Promise((r) => setTimeout(r, 3000));
     }
   }
   if (!applied) {
-    log('db', 'Could not apply migrations; the backend will report the DB as down.', 'red');
+    log('db', 'Migrations failed after 6 attempts. Check the database URL, connectivity, and migration error above.', 'red');
   }
 
   if (process.env.SSAMS_SEED === 'true') {
@@ -417,7 +417,7 @@ async function startServices() {
 
 async function healthCheck() {
   const beUrl = `http://localhost:${BACKEND_PORT}/api/health`;
-  log('health', `Waiting for backend on :${BACKEND_PORT} ...`, 'blue');
+  log('health', `Checking backend readiness at http://localhost:${BACKEND_PORT}/api/health ...`, 'blue');
   const be = await waitForHttp(beUrl, {
     timeout: 60000,
     validate: (r) => r.json && r.json.status === 'ok',
@@ -434,7 +434,7 @@ async function healthCheck() {
     );
   }
 
-  log('health', `Waiting for AI service on :${AI_PORT} ...`, 'blue');
+  log('health', `Checking AI service readiness at http://localhost:${AI_PORT}/health ...`, 'blue');
   const ai = await waitForHttp(`http://localhost:${AI_PORT}/health`, {
     timeout: 30000,
     validate: (r) => r.json && r.json.status === 'ok',

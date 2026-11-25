@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { AuthContext, type AuthContextValue, type AuthStatus } from './AuthContext';
 import * as authService from '@/services/auth.service';
-import { clearTokens, onSessionExpired, setTokens } from '@/services/api';
+import { clearTokens, hasRefreshSessionHint, onSessionExpired, setTokens } from '@/services/api';
 import type { AuthUser, LoginRequest } from '@/types';
 import { deriveDisplayName } from '@/utils/displayName';
 
@@ -33,6 +33,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [queryClient]);
 
   const bootstrap = useCallback(async () => {
+    if (!hasRefreshSessionHint()) {
+      resetClientState();
+      setUser(null);
+      setStatus('unauthenticated');
+      return;
+    }
+
     try {
       const session = await authService.refreshSession();
       setUser(session.user);

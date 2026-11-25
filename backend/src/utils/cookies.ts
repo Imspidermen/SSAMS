@@ -34,10 +34,21 @@ export function setAuthCookies(res: Response, input: AuthCookiesInput): void {
     maxAge: input.accessTokenMaxAgeMs,
     path: '/',
   });
+  // This does not authenticate anything.  It merely lets the SPA distinguish
+  // a first-time visitor from a browser that may have an httpOnly refresh
+  // cookie, avoiding an expected 401 during initial page load.
+  res.cookie('session_hint', '1', {
+    httpOnly: false,
+    secure: env.COOKIE_SECURE,
+    sameSite: 'lax',
+    maxAge: input.refreshTokenMaxAgeMs,
+    path: '/',
+  });
 }
 
 export function clearAuthCookies(res: Response): void {
   res.clearCookie('access_token', { path: '/' });
   res.clearCookie('refresh_token', { path: '/api/auth' });
   res.clearCookie('csrf_token', { path: '/' });
+  res.clearCookie('session_hint', { path: '/' });
 }

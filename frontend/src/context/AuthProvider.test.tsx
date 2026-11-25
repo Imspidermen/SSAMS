@@ -11,12 +11,15 @@ const mocks = vi.hoisted(() => ({
   behaviour: { current: {} as Record<string, unknown> },
   sessionExpiredHandler: { current: null as ((reason: string) => void) | null },
   clearTokensCalls: { current: 0 },
+  refreshCalls: { current: 0 },
+  sessionHint: { current: true },
 }));
 
 // The token store lives in services/api; the provider is the only thing allowed
 // to write to it, so the calls are counted rather than spied on (restoreMocks
 // wipes vi.fn() implementations between tests).
 vi.mock('@/services/api', () => ({
+  hasRefreshSessionHint: () => mocks.sessionHint.current,
   setTokens: () => undefined,
   clearTokens: () => {
     mocks.clearTokensCalls.current += 1;
@@ -32,6 +35,7 @@ vi.mock('@/services/api', () => ({
 vi.mock('@/services/auth.service', () => ({
   login: () => Promise.resolve(mocks.behaviour.current.login as AuthTokens),
   refreshSession: () => {
+    mocks.refreshCalls.current += 1;
     const value = mocks.behaviour.current.refresh;
     return value instanceof Error ? Promise.reject(value) : Promise.resolve(value as AuthTokens);
   },
@@ -94,6 +98,8 @@ beforeEach(() => {
     me: new Error('no access cookie'),
   };
   mocks.clearTokensCalls.current = 0;
+  mocks.refreshCalls.current = 0;
+  mocks.sessionHint.current = true;
 });
 
 describe('AuthProvider bootstrap', () => {
@@ -103,6 +109,14 @@ describe('AuthProvider bootstrap', () => {
     await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('unauthenticated'));
     expect(screen.getByTestId('user').textContent).toBe('signed out');
     expect(mocks.clearTokensCalls.current).toBeGreaterThan(0);
+  });
+
+  it('does not call the authenticated endpoints for a first-time visitor', async () => {
+    mocks.sessionHint.current = false;
+    renderProvider();
+
+    await waitFor(() => expect(screen.getByTestId('status').textContent).toBe('unauthenticated'));
+    expect(mocks.refreshCalls.current).toBe(0);
   });
 
   it('restores the session from the refresh endpoint with the real display name', async () => {

@@ -38,6 +38,19 @@ export function createApp() {
     pinoHttp({
       logger,
       autoLogging: { ignore: (req) => req.url === '/api/health' },
+      customLogLevel: (_req, res, err) => {
+        if (err || res.statusCode >= 500) return 'error';
+        if (res.statusCode >= 400) return 'warn';
+        return 'info';
+      },
+      customSuccessMessage: (req, res) => `${req.method} ${req.url} -> ${res.statusCode}`,
+      customErrorMessage: (req, res, err) =>
+        `${req.method} ${req.url} -> ${res.statusCode}: ${err?.message || 'request rejected'}`,
+      serializers: {
+        req: (req) => ({ method: req.method, url: req.url }),
+        res: (res) => ({ statusCode: res.statusCode }),
+        err: (err) => ({ type: err.type, message: err.message, stack: err.stack }),
+      },
     }),
   );
 
