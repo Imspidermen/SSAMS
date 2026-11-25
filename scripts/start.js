@@ -170,8 +170,11 @@ function registerChild(name, child, opts) {
   });
 }
 
-function npmExec(dir, bin, binArgs) {
-  return run(npmBin(), ['--prefix', dir, 'exec', bin, ...binArgs], { cwd: dir });
+// Use the project's npm scripts (npm run <script>) rather than `npm exec`, which
+// is unreliable on Windows (it can throw `spawn EINVAL`). These scripts already
+// exist in each package.json and work in the user's normal workflow.
+function npmRun(dir, script) {
+  return run(npmBin(), ['--prefix', dir, 'run', script], { cwd: ROOT });
 }
 
 function spawnBackend() {
@@ -215,7 +218,7 @@ async function bootstrap() {
   }
 
   log('setup', 'Generating Prisma client...', 'blue');
-  await npmExec(BE, 'prisma', ['generate']).catch((e) => {
+  await npmRun(BE, 'prisma:generate').catch((e) => {
     throw new Error(`prisma generate failed: ${e.message}`);
   });
 
@@ -293,7 +296,7 @@ async function setupDatabase() {
   let applied = false;
   for (let i = 0; i < 6; i += 1) {
     try {
-      await npmExec(BE, 'prisma', ['migrate', 'deploy']);
+      await npmRun(BE, 'prisma:migrate:deploy');
       applied = true;
       break;
     } catch (e) {
@@ -308,9 +311,7 @@ async function setupDatabase() {
 
   if (process.env.SSAMS_SEED === 'true') {
     log('db', 'Seeding demo accounts...', 'blue');
-    await run(npmBin(), ['--prefix', BE, 'run', 'db:seed'], { cwd: ROOT }).catch((e) =>
-      log('db', `seed skipped: ${e.message}`, 'yellow'),
-    );
+    await npmRun(BE, 'db:seed').catch((e) => log('db', `seed skipped: ${e.message}`, 'yellow'));
   }
 }
 
