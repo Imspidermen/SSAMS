@@ -92,6 +92,22 @@ function hasBinary(cmd) {
   return null;
 }
 
+// On Windows, invoking npm / *.cmd binaries is far more reliable through the
+// system shell. We also sanitise the environment so that no non-string value can
+// trigger a low-level `spawn EINVAL` (a common Windows failure mode).
+const USE_SHELL = process.platform === 'win32';
+
+function cleanEnv(env) {
+  const base = env && typeof env === 'object' ? env : process.env;
+  const out = {};
+  for (const key of Object.keys(base)) {
+    const v = base[key];
+    if (v === undefined || v === null) continue;
+    out[key] = typeof v === 'string' ? v : String(v);
+  }
+  return out;
+}
+
 /**
  * Spawn a child process and stream its output to the parent console with a
  * colored [name] prefix. Returns the ChildProcess.
@@ -100,8 +116,9 @@ function spawnCmd(name, cmd, args, opts = {}) {
   const colorName = opts.color || 'white';
   const child = spawn(cmd, args, {
     cwd: opts.cwd,
-    env: opts.env || process.env,
+    env: cleanEnv(opts.env),
     stdio: ['ignore', 'pipe', 'pipe'],
+    shell: USE_SHELL,
   });
   const prefix = color(colorName, `[${name}]`);
   const relay = (stream, isErr) => {
@@ -131,8 +148,9 @@ function run(cmd, args, opts = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(cmd, args, {
       cwd: opts.cwd,
-      env: opts.env || process.env,
+      env: cleanEnv(opts.env),
       stdio: opts.silent ? 'ignore' : 'inherit',
+      shell: USE_SHELL,
     });
     child.on('error', reject);
     child.on('exit', (code) => {
