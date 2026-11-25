@@ -108,17 +108,37 @@ function cleanEnv(env) {
   return out;
 }
 
+// Build a single shell command line (Windows). Quoting only kicks in for tokens
+// that contain spaces or shell metacharacters, which keeps our controlled args
+// intact while avoiding the DEP0190 "args + shell" warning.
+function toCommand(cmd, args) {
+  const quote = (s) => {
+    const str = String(s);
+    return /[ \t"&|<>^%*?]/.test(str) ? `"${str.replace(/"/g, '\\"')}"` : str;
+  };
+  return [quote(cmd), ...args.map(quote)].join(' ');
+}
+
+// Spawn helper that keeps the standard (cmd, args) form on POSIX, and switches to
+// a single shell command string on Windows (no args array) so `shell: true`
+// doesn't emit the deprecation warning.
+function spawnChild(cmd, args, opts) {
+  if (USE_SHELL) {
+    return spawn(toCommand(cmd, args), { ...opts, shell: true });
+  }
+  return spawn(cmd, args, opts);
+}
+
 /**
  * Spawn a child process and stream its output to the parent console with a
  * colored [name] prefix. Returns the ChildProcess.
  */
 function spawnCmd(name, cmd, args, opts = {}) {
   const colorName = opts.color || 'white';
-  const child = spawn(cmd, args, {
+  const child = spawnChild(cmd, args, {
     cwd: opts.cwd,
     env: cleanEnv(opts.env),
     stdio: ['ignore', 'pipe', 'pipe'],
-    shell: USE_SHELL,
   });
   const prefix = color(colorName, `[${name}]`);
   const relay = (stream, isErr) => {
@@ -146,11 +166,10 @@ function spawnCmd(name, cmd, args, opts = {}) {
 /** Run a command to completion. Resolves with exit code (0) or rejects. */
 function run(cmd, args, opts = {}) {
   return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, {
+    const child = spawnChild(cmd, args, {
       cwd: opts.cwd,
       env: cleanEnv(opts.env),
       stdio: opts.silent ? 'ignore' : 'inherit',
-      shell: USE_SHELL,
     });
     child.on('error', reject);
     child.on('exit', (code) => {
