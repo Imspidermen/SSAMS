@@ -15,6 +15,13 @@ const envSchema = z.object({
   AI_SERVICE_URL: z.string().default('http://localhost:8000'),
   AI_SERVICE_TIMEOUT_MS: z.coerce.number().default(8000),
 
+  // When true the backend serves the built frontend SPA from /frontend/dist on
+  // the same origin/port (production). Defaults on in production, off in dev.
+  SERVE_FRONTEND: z.coerce.boolean().default(process.env.NODE_ENV === 'production'),
+  // Public origin the app is reachable at (e.g. the tunnel URL). Optional; used
+  // to tighten CORS/cookie behaviour when known.
+  PUBLIC_URL: z.string().optional(),
+
   JWT_ACCESS_SECRET: z.string().min(16, 'JWT_ACCESS_SECRET must be set and non-trivial'),
   JWT_REFRESH_SECRET: z.string().min(16, 'JWT_REFRESH_SECRET must be set and non-trivial'),
   JWT_ACCESS_EXPIRES_IN: z.string().default('15m'),

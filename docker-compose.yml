@@ -1,0 +1,74 @@
+# =============================================================================
+# SSAMS — full stack in containers (optional production deployment)
+#
+# Brings up PostgreSQL, the Node backend (which also serves the built frontend
+# SPA), and the Python AI service. An optional cloudflared sidecar exposes the
+# whole stack on a public *.trycloudflare.com URL.
+#
+#   docker compose up --build                 # app on http://localhost:4000
+#   docker compose --profile tunnel up --build # also open a public tunnel
+#
+# Set JWT_ACCESS_SECRET / JWT_REFRESH_SECRET and CORS_ORIGIN in your environment
+# (e.g. `export JWT_ACCESS_SECRET=...`) — they are passed through to the backend.
+# =============================================================================
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ssams
+      POSTGRES_PASSWORD: ssams
+      POSTGRES_DB: ssams
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ssams"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  backend:
+    build: ./backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://ssams:ssams@postgres:5432/ssams?schema=public
+      NODE_ENV: production
+      SERVE_FRONTEND: "true"
+      PORT: "4000"
+      AI_SERVICE_URL: http://ai:8000
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-please-change-access-secret}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-please-change-refresh-secret}
+      CORS_ORIGIN: ${CORS_ORIGIN:-*}
+      COOKIE_SECURE: "true"
+    ports:
+      - "4000:4000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4000/api/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  ai:
+    build: ./ai-service
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Optional public tunnel. Enable with: docker compose --profile tunnel up --build
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    depends_on:
+      - backend
+    command: tunnel --no-autoupdate --url http://backend:4000
+    profiles:
+      - tunnel
+
+volumes:
+  pgdata:

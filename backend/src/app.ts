@@ -10,6 +10,7 @@ import routes from './routes';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { csrfProtection } from './middleware/auth';
 import { generalApiLimiter } from './middleware/rateLimit';
+import { staticFrontend } from './middleware/staticFrontend';
 
 export function createApp() {
   const app = express();
@@ -43,6 +44,11 @@ export function createApp() {
   app.use('/api', generalApiLimiter);
   app.use('/api', csrfProtection);
   app.use('/api', routes);
+
+  // In production the backend also serves the built SPA on the same origin,
+  // eliminating the need for a separate dev server or reverse proxy. API
+  // routes above always win over the static handler.
+  app.use(staticFrontend());
 
   app.use(notFoundHandler);
   app.use(errorHandler);
