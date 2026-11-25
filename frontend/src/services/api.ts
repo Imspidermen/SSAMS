@@ -64,9 +64,6 @@ function readCookie(name: string): string | null {
   return match ? decodeURIComponent(match.slice(name.length + 1)) : null;
 }
 
-<<<<<<< Updated upstream
-/** Echo the current cookie; another tab may have rotated it since login. */
-=======
 /**
  * The hint is non-sensitive and is set beside the httpOnly refresh cookie.
  * Without it, a new visitor has no session to restore, so skip the deliberate
@@ -77,7 +74,6 @@ export function hasRefreshSessionHint(): boolean {
 }
 
 /** CSRF token from memory, falling back to the JS-readable cookie. */
->>>>>>> Stashed changes
 function resolveCsrfToken(): string | null {
   return readCookie('csrf_token') ?? tokenState.csrfToken;
 }
