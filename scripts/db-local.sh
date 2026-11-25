@@ -12,7 +12,9 @@ set -euo pipefail
 
 ACTION="${1:-up}"
 PG_VERSION_DIR="$(ls -d /usr/lib/postgresql/*/bin 2>/dev/null | sort -V | tail -1 || true)"
-PG_BIN="${PG_VERSION_DIR}"
+# SSAMS_PG_BIN is supplied by the Node launcher for standard Windows installs,
+# which normally do not add PostgreSQL's bin directory to PATH.
+PG_BIN="${SSAMS_PG_BIN:-${PG_VERSION_DIR}}"
 DATA_DIR=".ssams/pgdata"
 SOCK_DIR=".ssams/pg-sockets"
 PG_PORT="${SSAMS_LOCAL_DB_PORT:-5432}"

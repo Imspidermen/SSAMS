@@ -27,6 +27,7 @@ ai-service/models/*.onnx
 *.sqlite
 *.sqlite3
 .pgdata/
+.ssams/
 .idea/
 .vscode/*
 !.vscode/extensions.json

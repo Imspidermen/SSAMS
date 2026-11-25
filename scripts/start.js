@@ -20,6 +20,7 @@
 
 const path = require('path');
 const fs = require('fs');
+const net = require('net');
 const { spawn } = require('child_process');
 const {
   color,
@@ -75,7 +76,10 @@ const flags = {
   dev: args.includes('--dev'),
   install: !args.includes('--no-install'),
   build: !args.includes('--no-build'),
-  tunnel: !args.includes('--no-tunnel'),
+  // A public tunnel is useful for production, but delaying local live reload
+  // to download/open one is surprising in development. Opt in with
+  // `--tunnel=cloudflared` or `--tunnel=ngrok` when it is needed.
+  tunnel: !args.includes('--no-tunnel') && (!args.includes('--dev') || args.some((arg) => arg.startsWith('--tunnel='))),
   db: !args.includes('--no-db'),
   health: !args.includes('--no-health'),
   seed: args.includes('--seed'),
@@ -127,9 +131,14 @@ for (const [k, v] of Object.entries(merged)) {
 }
 process.env.NODE_ENV = NODE_ENV;
 
-const PORT = cliPort || Number(process.env.PORT) || (isDev ? 5173 : 4000);
-process.env.PORT = String(PORT);
-const FE_PORT = isDev ? PORT : PORT; // dev: Vite dev server is the public face
+// Dev mode has two listeners: Vite is public on 5173 while the API stays on
+// 4000 (the target configured in frontend/vite.config.ts). Production has one.
+const PORT = isDev
+  ? (cliPort || Number(process.env.SSAMS_DEV_PORT) || 5173)
+  : (cliPort || Number(process.env.PORT) || 4000);
+const BACKEND_PORT = isDev ? Number(process.env.BACKEND_PORT || 4000) : PORT;
+process.env.PORT = String(BACKEND_PORT);
+const FE_PORT = isDev ? PORT : BACKEND_PORT;
 const AI_PORT = Number(process.env.AI_SERVICE_PORT || 8000);
 process.env.AI_SERVICE_PORT = String(AI_PORT);
 
@@ -196,7 +205,9 @@ function spawnFrontendDev() {
   return spawnCmd('frontend', npmBin(), ['--prefix', FE, 'run', 'dev'], {
     cwd: ROOT,
     color: 'cyan',
-    env: process.env,
+    // Vite reads PORT from the inherited environment before its .env file.
+    // Keep it separate from the API listener in development.
+    env: { ...process.env, PORT: String(FE_PORT) },
   });
 }
 
@@ -272,19 +283,35 @@ async function installDeps() {
 
 async function setupDatabase() {
   if (!process.env.DATABASE_URL) {
+    const localPostgresBin = findLocalPostgresBin();
     const canLocal =
       process.env.SSAMS_LOCAL_DB === '1' ||
       hasBinary('docker') ||
+      Boolean(localPostgresBin) ||
       (process.platform !== 'win32' && (hasBinary('initdb') || hasBinary('pg_ctl')));
     if (!canLocal) {
       log('db', 'DATABASE_URL is not set. Provide a managed Postgres (Neon/Supabase/RDS)', 'red');
       log('db', 'or run `npm run db:local` (needs Postgres/Docker) before starting.', 'red');
       process.exit(1);
     }
+    if (localPostgresBin) process.env.SSAMS_PG_BIN = localPostgresBin;
+    // A Windows PostgreSQL installer commonly starts its own service on 5432.
+    // Keep SSAMS isolated when that port is already in use unless the operator
+    // explicitly chose a port.
+    if (localPostgresBin && !process.env.SSAMS_LOCAL_DB_PORT && await isTcpPortOpen(5432)) {
+      process.env.SSAMS_LOCAL_DB_PORT = '5433';
+      log('db', 'Port 5432 is already in use; using local PostgreSQL port 5433.', 'yellow');
+    }
     process.env.DATABASE_URL = `postgresql://ssams:ssams@localhost:${process.env.SSAMS_LOCAL_DB_PORT || 5432}/ssams?schema=public`;
     log('db', `No DATABASE_URL — starting local PostgreSQL (${process.env.DATABASE_URL})`, 'yellow');
     try {
-      await run('bash', [path.join(__dirname, 'db-local.sh'), 'up'], { cwd: ROOT });
+      if (process.platform === 'win32' && localPostgresBin) {
+        // `run` uses cmd.exe on Windows; invoking the PATH-resolved `node`
+        // avoids cmd splitting a `process.execPath` such as Program Files\\nodejs.
+        await run('node', [path.join(__dirname, 'db-local.js'), 'up'], { cwd: ROOT, env: process.env });
+      } else {
+        await run('bash', [path.join(__dirname, 'db-local.sh'), 'up'], { cwd: ROOT, env: process.env });
+      }
     } catch (e) {
       log('db', `Local PostgreSQL failed to start: ${e.message}`, 'red');
       log('db', 'Set DATABASE_URL to a reachable Postgres and re-run.', 'red');
@@ -315,16 +342,57 @@ async function setupDatabase() {
   }
 }
 
+/**
+ * Locate a standard Windows PostgreSQL installation even when its bin folder
+ * was not added to PATH by the installer. Linux/macOS are handled by the shell
+ * helper and the normal PATH lookup above.
+ */
+function findLocalPostgresBin() {
+  if (process.env.SSAMS_PG_BIN && fs.existsSync(path.join(process.env.SSAMS_PG_BIN, process.platform === 'win32' ? 'pg_ctl.exe' : 'pg_ctl'))) {
+    return process.env.SSAMS_PG_BIN;
+  }
+  if (hasBinary('pg_ctl')) return null;
+  if (process.platform !== 'win32') return null;
+
+  const installRoot = path.join(process.env.ProgramFiles || 'C:\\Program Files', 'PostgreSQL');
+  if (!fs.existsSync(installRoot)) return null;
+
+  const versions = fs
+    .readdirSync(installRoot, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+  return versions
+    .map((version) => path.join(installRoot, version, 'bin'))
+    .find((bin) => fs.existsSync(path.join(bin, 'pg_ctl.exe'))) || null;
+}
+
+function isTcpPortOpen(port) {
+  return new Promise((resolve) => {
+    const socket = net.connect({ host: '127.0.0.1', port });
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      resolve(value);
+    };
+    socket.setTimeout(500, () => finish(false));
+    socket.once('connect', () => finish(true));
+    socket.once('error', () => finish(false));
+  });
+}
+
 function applyPublicOrigin(publicUrl) {
   if (!publicUrl) {
-    const local = `http://localhost:${PORT}`;
+    const local = `http://localhost:${FE_PORT}`;
     process.env.CORS_ORIGIN = process.env.CORS_ORIGIN || local;
     process.env.FRONTEND_URL = process.env.FRONTEND_URL || local;
     process.env.COOKIE_SECURE = process.env.COOKIE_SECURE || 'false';
     return;
   }
   const origin = publicUrl.replace(/\/$/, '');
-  const localOrigin = `http://localhost:${PORT}`;
+  const localOrigin = `http://localhost:${FE_PORT}`;
   const origins = Array.from(new Set([origin, localOrigin]));
   process.env.CORS_ORIGIN = process.env.CORS_ORIGIN || origins.join(',');
   process.env.FRONTEND_URL = process.env.FRONTEND_URL || origin;
@@ -343,13 +411,13 @@ async function startServices() {
     await healthCheck();
   }
 
-  const localUrl = isDev ? `http://localhost:${FE_PORT}` : `http://localhost:${PORT}`;
+  const localUrl = `http://localhost:${FE_PORT}`;
   printReady({ localUrl, publicUrl: tunnelRef ? tunnelRef.url : null });
 }
 
 async function healthCheck() {
-  const beUrl = `http://localhost:${PORT}/api/health`;
-  log('health', `Waiting for backend on :${PORT} ...`, 'blue');
+  const beUrl = `http://localhost:${BACKEND_PORT}/api/health`;
+  log('health', `Waiting for backend on :${BACKEND_PORT} ...`, 'blue');
   const be = await waitForHttp(beUrl, {
     timeout: 60000,
     validate: (r) => r.json && r.json.status === 'ok',
