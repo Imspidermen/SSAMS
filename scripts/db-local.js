@@ -11,8 +11,14 @@ const { spawn, spawnSync } = require('child_process');
 const root = path.resolve(__dirname, '..');
 let pgBin = process.env.SSAMS_PG_BIN;
 let port = Number(process.env.SSAMS_LOCAL_DB_PORT || 5432);
-const dataDir = path.join(root, '.ssams', 'pgdata');
-const logFile = path.join(root, '.ssams', 'pg.log');
+// Never leave the launcher waiting indefinitely when another program has a
+// socket open but is not a functioning PostgreSQL server.
+process.env.PGCONNECT_TIMEOUT = process.env.PGCONNECT_TIMEOUT || '5';
+// Allow an alternate local cluster when an old PostgreSQL process is still
+// holding the default one (for example after a Windows crash).  Keeping this
+// configurable lets the launcher recover without touching the old data.
+const dataDir = path.resolve(root, process.env.SSAMS_LOCAL_DB_DATA_DIR || path.join('.ssams', 'pgdata'));
+const logFile = path.join(root, '.ssams', `pg-${port}.log`);
 const exe = (name) => path.join(pgBin || '', `${name}.exe`);
 
 function findWindowsPostgresBin() {
@@ -37,14 +43,13 @@ function run(command, args, { silent = false } = {}) {
 
 function ready() {
   return new Promise((resolve) => {
-    const socket = net.connect({ host: '127.0.0.1', port });
-    const done = (value) => {
-      socket.destroy();
-      resolve(value);
-    };
-    socket.setTimeout(500, () => done(false));
-    socket.once('connect', () => done(true));
-    socket.once('error', () => done(false));
+    const probe = spawn(exe('pg_isready'), ['-h', '127.0.0.1', '-p', String(port), '-t', '2'], {
+      cwd: root,
+      stdio: 'ignore',
+      shell: false,
+    });
+    probe.once('error', () => resolve(false));
+    probe.once('exit', (code) => resolve(code === 0));
   });
 }
 
