@@ -4,7 +4,7 @@ import type {
   LoginRequest,
   SessionUser,
 } from '@/types';
-import { api, clearTokens, setTokens } from './api';
+import { api, clearTokens, refreshAuthTokens, setTokens } from './api';
 
 /**
  * POST /auth/login - the backend sets httpOnly `access_token` / `refresh_token`
@@ -21,9 +21,7 @@ export async function login(credentials: LoginRequest): Promise<AuthTokens> {
 
 /** POST /auth/refresh - rotates the refresh token cookie and returns new tokens. */
 export async function refreshSession(): Promise<AuthTokens> {
-  const data = await api.post<AuthTokens>('/auth/refresh', {}, { skipAuthRefresh: true });
-  setTokens({ accessToken: data.accessToken, csrfToken: data.csrfToken });
-  return data;
+  return refreshAuthTokens();
 }
 
 /** GET /auth/me - lightweight session probe used to bootstrap the app. */

@@ -5,12 +5,21 @@ import axios, {
 } from 'axios';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { API_TIMEOUT_MS, VERIFICATION_TIMEOUT_MS } from '@/config/env';
-import { checkLocation, verifyFace, verifyLiveness } from './attendance.service';
+import { describeApiError } from '@/utils/apiError';
+import {
+  checkLocation,
+  markAttendance,
+  verifyBlink,
+  verifyFace,
+  verifyLiveness,
+} from './attendance.service';
+import * as authService from './auth.service';
 import {
   api,
   apiClient,
   clearTokens,
   getAccessToken,
+  hasRefreshSessionHint,
   onSessionExpired,
   setTokens,
 } from './api';
@@ -58,6 +67,7 @@ afterEach(() => {
   unsubscribe();
   clearTokens();
   document.cookie = 'csrf_token=; Max-Age=0; path=/';
+  document.cookie = 'session_hint=; Max-Age=0; path=/';
   apiClient.defaults.adapter = originalAdapter;
   axios.defaults.adapter = originalGlobalAdapter;
 });
@@ -187,5 +197,129 @@ describe('live attendance session recovery', () => {
     expect(refresh).toHaveBeenCalledTimes(1);
     expect(sessionExpired).toHaveBeenCalledTimes(1);
     expect(getAccessToken() === null).toBe(true);
+  });
+
+  it('completes the full student attendance flow when liveness initially returns 401 LIVENESS_FAILED', async () => {
+    clearTokens();
+    const refresh = vi.fn(async (config: InternalAxiosRequestConfig) =>
+      reject(config, 'CSRF_INVALID', 403),
+    );
+    axios.defaults.adapter = refresh;
+
+    const calls: string[] = [];
+    let livenessAttempts = 0;
+    apiClient.defaults.adapter = async (config) => {
+      const url = config.url ?? '';
+      calls.push(url);
+
+      if (url === '/auth/login') {
+        document.cookie = 'csrf_token=login-csrf; path=/';
+        document.cookie = 'session_hint=1; path=/';
+        return succeed(config, {
+          user: { id: 'student', email: 'student@example.test', role: 'STUDENT', name: 'Student' },
+          accessToken: 'login-access',
+          csrfToken: 'login-csrf',
+        });
+      }
+
+      expect(config.headers.get('Authorization')).toBe('Bearer login-access');
+      expect(config.headers.get('X-CSRF-Token')).toBe('login-csrf');
+
+      if (url === '/attendance/liveness') {
+        livenessAttempts += 1;
+        if (livenessAttempts === 1) {
+          return respond(config, 401, {
+            success: false,
+            error: {
+              code: 'LIVENESS_FAILED',
+              message: 'Live face verification failed. Please move your face and try again.',
+            },
+          });
+        }
+      }
+
+      return succeed(config);
+    };
+
+    await authService.login({ email: 'student@example.test', password: 'Password123' });
+    expect(hasRefreshSessionHint()).toBe(true);
+
+    await api.get('/students/me');
+    await api.get('/attendance/sessions');
+    await checkLocation({
+      sessionId: 'session',
+      latitude: 26.1445,
+      longitude: 91.7362,
+      accuracyMeters: 10,
+      timestamp: Date.now(),
+    });
+    await verifyFace('attempt', 'synthetic-frame');
+
+    let caughtError: unknown;
+    try {
+      await verifyLiveness('attempt', ['synthetic-frame']);
+    } catch (err) {
+      caughtError = err;
+    }
+
+    expect(caughtError).toMatchObject({ status: 401, code: 'LIVENESS_FAILED' });
+    expect(describeApiError(caughtError)).toBe(
+      'Live face verification failed. Please move your face and try again.',
+    );
+    expect(describeApiError(caughtError)).not.toMatch(/session has expired/i);
+    expect(refresh).not.toHaveBeenCalled();
+    expect(sessionExpired).not.toHaveBeenCalled();
+    expect(getAccessToken()).toBe('login-access');
+
+    await verifyLiveness('attempt', ['synthetic-frame']);
+    await verifyBlink('attempt', ['synthetic-frame']);
+    await markAttendance('attempt');
+
+    expect(calls).toEqual([
+      '/auth/login',
+      '/students/me',
+      '/attendance/sessions',
+      '/attendance/location-check',
+      '/attendance/face/verify',
+      '/attendance/liveness',
+      '/attendance/liveness',
+      '/attendance/blink',
+      '/attendance/mark',
+    ]);
+  });
+
+  it('deduplicates explicit authService.refreshSession() and silent 401 refresh into one rotation', async () => {
+    let finishRefresh!: () => void;
+    const refreshGate = new Promise<void>((resolve) => {
+      finishRefresh = resolve;
+    });
+    const refresh = vi.fn(async (config: InternalAxiosRequestConfig) => {
+      expect(config.headers.has('Authorization')).toBe(false);
+      expect(config.headers.get('X-CSRF-Token')).toBe('current-csrf');
+      await refreshGate;
+      return rotated(config);
+    });
+    axios.defaults.adapter = refresh;
+
+    let attempts = 0;
+    apiClient.defaults.adapter = async (config) => {
+      attempts += 1;
+      if (attempts === 1) return reject(config, 'TOKEN_INVALID');
+      expect(config.headers.get('Authorization')).toBe('Bearer rotated-access');
+      return succeed(config);
+    };
+
+    const explicit = authService.refreshSession();
+    const pipelineStep = verifyLiveness('attempt', ['synthetic-frame']);
+
+    await vi.waitFor(() => expect(refresh).toHaveBeenCalledTimes(1));
+    finishRefresh();
+
+    const [tokens, verified] = await Promise.all([explicit, pipelineStep]);
+    expect(tokens.accessToken).toBe('rotated-access');
+    expect(verified).toEqual({ verified: true });
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(attempts).toBe(2);
+    expect(sessionExpired).not.toHaveBeenCalled();
   });
 });

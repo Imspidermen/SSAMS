@@ -27,7 +27,7 @@ import axios, {
   type Method,
 } from 'axios';
 import { API_TIMEOUT_MS, appConfig } from '@/config/env';
-import type { ApiErrorResponse, ApiResponse } from '@/types';
+import type { ApiErrorResponse, ApiResponse, AuthTokens } from '@/types';
 import { ApiError } from '@/utils/apiError';
 
 /* ------------------------------------------------------------------------- */
@@ -64,9 +64,6 @@ function readCookie(name: string): string | null {
   return match ? decodeURIComponent(match.slice(name.length + 1)) : null;
 }
 
-<<<<<<< Updated upstream
-/** Echo the current cookie; another tab may have rotated it since login. */
-=======
 /**
  * The hint is non-sensitive and is set beside the httpOnly refresh cookie.
  * Without it, a new visitor has no session to restore, so skip the deliberate
@@ -76,8 +73,7 @@ export function hasRefreshSessionHint(): boolean {
   return readCookie('session_hint') === '1';
 }
 
-/** CSRF token from memory, falling back to the JS-readable cookie. */
->>>>>>> Stashed changes
+/** Echo the current cookie (another tab may have rotated it), falling back to memory. */
 function resolveCsrfToken(): string | null {
   return readCookie('csrf_token') ?? tokenState.csrfToken;
 }
@@ -125,7 +121,13 @@ const AUTH_REFRESH_PATHS = ['/auth/login', '/auth/refresh'];
 
 function isAuthRefreshPath(url?: string): boolean {
   if (!url) return false;
-  return AUTH_REFRESH_PATHS.some((path) => url === path || url.startsWith(`${path}?`));
+  return AUTH_REFRESH_PATHS.some(
+    (path) =>
+      url === path ||
+      url.startsWith(`${path}?`) ||
+      url.endsWith(path) ||
+      url.includes(`${path}?`),
+  );
 }
 
 apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
@@ -144,16 +146,18 @@ apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
 /* Silent refresh (single-flight)                                             */
 /* ------------------------------------------------------------------------- */
 
-let refreshPromise: Promise<boolean> | null = null;
+export type AuthPayload = AuthTokens;
+
+let refreshFlight: Promise<AuthPayload> | null = null;
 
 /**
- * Attempts to rotate the refresh token. Resolves `true` when a new access
- * token was obtained. Never throws - callers treat `false` as "logged out".
+ * Single-flight `POST /auth/refresh` shared by both explicit session recovery
+ * and the 401 response interceptor so refresh-token rotation never races itself.
  */
-export function refreshSession(): Promise<boolean> {
-  if (refreshPromise) return refreshPromise;
+export function refreshAuthTokens(): Promise<AuthPayload> {
+  if (refreshFlight) return refreshFlight;
 
-  refreshPromise = (async () => {
+  refreshFlight = (async () => {
     try {
       // Bare axios call: bypasses the interceptors so a failing refresh cannot
       // recurse into another refresh attempt.
@@ -168,28 +172,41 @@ export function refreshSession(): Promise<boolean> {
         },
       );
       const payload = response.data?.data;
-      if (!payload?.accessToken) return false;
+      if (!payload?.accessToken) {
+        throw new ApiError({
+          message: 'Session expired. Please log in again.',
+          status: 401,
+          code: 'REFRESH_INVALID',
+        });
+      }
       tokenState.accessToken = payload.accessToken;
       tokenState.csrfToken = payload.csrfToken ?? tokenState.csrfToken;
       refreshListeners.forEach((listener) => listener(payload));
-      return true;
-    } catch {
-      return false;
+      return payload;
+    } catch (error) {
+      throw toApiError(error);
     } finally {
       // Clear on the next tick so queued callers share the same result.
       queueMicrotask(() => {
-        refreshPromise = null;
+        refreshFlight = null;
       });
     }
   })();
 
-  return refreshPromise;
+  return refreshFlight;
 }
 
-export interface AuthPayload {
-  user: { id: string; email: string; role: string; name: string };
-  accessToken: string;
-  csrfToken: string;
+/**
+ * Attempts to rotate the refresh token. Resolves `true` when a new access
+ * token was obtained. Never throws - callers treat `false` as "logged out".
+ */
+export async function refreshSession(): Promise<boolean> {
+  try {
+    await refreshAuthTokens();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 type RefreshListener = (payload: AuthPayload) => void;

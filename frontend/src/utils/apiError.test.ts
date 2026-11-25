@@ -76,7 +76,28 @@ describe('apiError mapping', () => {
       new ApiError({ message: 'Invalid token', status: 401, code: 'UNAUTHORIZED' }),
     );
     expect(described).toMatch(/session has expired/i);
+    expect(
+      describeApiErrorTitle(
+        new ApiError({ message: 'Invalid token', status: 401, code: 'TOKEN_INVALID' }),
+      ),
+    ).toBe('Session expired');
   });
+
+  it.each(['FACE_NOT_RECOGNIZED', 'LIVENESS_FAILED', 'BLINK_NOT_DETECTED'])(
+    'surfaces the backend message instead of session-expired copy for biometric 401 (%s)',
+    (code) => {
+      const error = new ApiError({
+        message: 'Live face verification failed. Please move your face and try again.',
+        status: 401,
+        code,
+      });
+      expect(describeApiError(error)).toBe(
+        'Live face verification failed. Please move your face and try again.',
+      );
+      expect(describeApiError(error)).not.toMatch(/session has expired/i);
+      expect(describeApiErrorTitle(error)).toBe('Verification failed');
+    },
+  );
 
   it('prefers the backend message when it is meaningful', () => {
     const error = new ApiError({

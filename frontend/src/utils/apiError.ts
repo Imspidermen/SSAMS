@@ -80,6 +80,16 @@ export function getApiErrorCode(error: unknown): string {
 }
 
 /**
+ * Attendance verification steps reuse HTTP 401 for biometric rejections while
+ * the authenticated student session itself is still valid.
+ */
+const BIOMETRIC_401_CODES = new Set([
+  'FACE_NOT_RECOGNIZED',
+  'LIVENESS_FAILED',
+  'BLINK_NOT_DETECTED',
+]);
+
+/**
  * Human readable, actionable copy for every error class the UI can hit.
  * The backend message is preferred when it is specific (it knows the domain);
  * otherwise we fall back to a status-appropriate explanation.
@@ -96,6 +106,9 @@ export function describeApiError(error: unknown): string {
       case 400:
         return error.message || 'The request was rejected. Please check the submitted values.';
       case 401:
+        if (BIOMETRIC_401_CODES.has(error.code)) {
+          return error.message || 'Verification check did not pass. Please try again.';
+        }
         return 'Your session has expired. Please log in again.';
       case 403:
         return error.message || 'You do not have permission to perform this action.';
@@ -126,7 +139,7 @@ export function describeApiErrorTitle(error: unknown): string {
   if (!isApiError(error)) return 'Something went wrong';
   switch (error.status) {
     case 401:
-      return 'Session expired';
+      return BIOMETRIC_401_CODES.has(error.code) ? 'Verification failed' : 'Session expired';
     case 403:
       return 'Access denied';
     case 404:
